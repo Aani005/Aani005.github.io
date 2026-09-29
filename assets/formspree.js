@@ -16,7 +16,8 @@
   var FORMS = [
     { formClass: "framer-l680r9", type: "Quote request",
       subject: "New quote request — ShipSpree",
-      success: "Thanks — we'll send your transparent quote within one business day." },
+      success: "Thanks — we'll send your transparent quote within one business day.",
+      framerConfirmId: "fs-quote-confirmation" },   // Framer's own message to reveal
     { formClass: "framer-ftisgs", type: "Carrier sign-up",
       subject: "New carrier sign-up — ShipSpree",
       success: "Thanks — we'll be in touch about getting you set up to haul." }
@@ -93,7 +94,21 @@
       .then(function (res) {
         form.__fsSending = false;
         busy(btn, false);
-        if (res.ok) { form.reset(); show(form, cfg.success, false); }
+        if (res.ok) {
+          form.reset();
+          // If Framer designed its own confirmation element, reveal that
+          // (matches site styling) instead of injecting our own banner.
+          var framerMsg = cfg.framerConfirmId && document.getElementById(cfg.framerConfirmId);
+          if (framerMsg) {
+            if (form.__fsStatus) form.__fsStatus.style.display = "none"; // hide our pending banner
+            framerMsg.style.setProperty("display", "block", "important");
+            framerMsg.style.setProperty("opacity", "1", "important");
+            framerMsg.style.setProperty("visibility", "visible", "important");
+            try { framerMsg.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+          } else {
+            show(form, cfg.success, false);
+          }
+        }
         else {
           res.json().then(function (j) {
             var m = (j && j.errors && j.errors.length)

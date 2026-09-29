@@ -1,9 +1,12 @@
 /* ============================================================
    ShipSpree — Formspree submission handler (Framer static export)
-   Framer's runtime intercepts clicks and tries to submit to Framer's
-   backend, which doesn't exist on GitHub Pages — so nothing happens.
-   This script binds on CLICK at the capture phase (before Framer's
-   own handler), takes over, and POSTs to Formspree via AJAX.
+
+   Framer's runtime attaches its own click/submit handlers that try to
+   reach Framer's backend (gone on GitHub Pages), so the buttons do
+   nothing. Racing it with a capture listener is unreliable. Instead we
+   CLONE each submit control — cloning drops all attached event
+   listeners, removing Framer's dead handler — then bind our own click
+   handler to the clone. Deterministic, no race.
    ============================================================ */
 (function () {
   "use strict";
@@ -19,52 +22,56 @@
       success: "Thanks — we'll be in touch about getting you set up to haul." }
   ];
 
-  // Framer builds the submit control as an <a>/<button> with data-reset="button",
-  // NOT always a type=submit. So: catch any click, see if it's inside one of our
-  // forms, and if the clicked thing is the form's main action control, take over.
-  // We ignore clicks on the dropdown toggles (aria-haspopup) and on inputs.
-  document.addEventListener("click", function (e) {
-    // Is the click inside one of our forms?
-    var form = e.target.closest("form");
-    if (!form) return;
-    var cfg = FORMS.filter(function (f) { return form.classList.contains(f.formClass); })[0];
-    if (!cfg) return; // not one of our forms — leave it alone
+  function wire() {
+    FORMS.forEach(function (cfg) {
+      document.querySelectorAll("form." + cfg.formClass).forEach(function (form) {
+        // Backstop: intercept the form's own submit event once per form.
+        if (!form.__fsSubmitBound) {
+          form.addEventListener("submit", function (e) {
+            e.preventDefault(); e.stopPropagation();
+            submit(form, null, cfg);
+          }, true);
+          form.__fsSubmitBound = true;
+        }
 
-    // The clicked control (link or button).
-    var ctrl = e.target.closest('a, button, [data-reset="button"], [role="button"]');
-    if (!ctrl) return;
+        // Find the submit control (NOT a dropdown toggle, NOT a field).
+        var candidates = Array.prototype.slice.call(
+          form.querySelectorAll('button[type="submit"], input[type="submit"], a[data-reset="button"], button[data-reset="button"]')
+        ).filter(function (el) {
+          return el.getAttribute("aria-haspopup") !== "listbox" && !el.closest('[aria-haspopup="listbox"]');
+        });
+        var ctrl = candidates[candidates.length - 1];
+        if (!ctrl || ctrl.__fsClone) return; // already our clean clone
 
-    // Ignore the select/dropdown toggles inside the form — they open menus, not submit.
-    if (ctrl.getAttribute("aria-haspopup") === "listbox" || ctrl.closest('[aria-haspopup="listbox"]')) return;
+        // Clone strips Framer's attached listeners; replace the original.
+        var clean = ctrl.cloneNode(true);
+        clean.__fsClone = true;
+        if (clean.tagName === "A") { clean.removeAttribute("href"); clean.style.cursor = "pointer"; }
+        ctrl.parentNode.replaceChild(clean, ctrl);
 
-    // Ignore clicks on the actual input fields.
-    if (e.target.closest("input, textarea, select")) return;
-
-    // This is the form's action control (Get Ballpark Pricing / Join the Carrier Network).
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-
-    submit(form, ctrl, cfg);
-  }, true); // <-- true = capture phase
+        clean.addEventListener("click", function (e) {
+          e.preventDefault(); e.stopPropagation();
+          submit(form, clean, cfg);
+        });
+      });
+    });
+  }
 
   function submit(form, btn, cfg) {
-    // Basic required-field check (don't send half-empty forms).
+    if (form.__fsSending) return;
+
     var missing = [];
     form.querySelectorAll("[required]").forEach(function (el) {
       if (!el.value || (el.type === "checkbox" && !el.checked)) {
-        var nm = el.getAttribute("name") || el.getAttribute("placeholder") || "a required field";
-        missing.push(nm);
+        missing.push(el.getAttribute("name") || el.getAttribute("placeholder") || "a required field");
       }
     });
-    // Also check email format if an email field is present & filled.
     var emailEl = form.querySelector('input[type="email"], input[name*="Email" i]');
     if (emailEl && emailEl.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailEl.value)) {
       missing.push("a valid email");
     }
     if (missing.length) {
-      show(form, "Please fill in: " + missing.slice(0, 4).join(", ") +
-        (missing.length > 4 ? "…" : "") + ".", true);
+      show(form, "Please fill in: " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? "…" : "") + ".", true);
       return;
     }
 
@@ -72,11 +79,13 @@
     data.set("form_type", cfg.type);
     data.set("_subject", cfg.subject);
 
+    form.__fsSending = true;
     busy(btn, true);
     show(form, "Sending…", false, true);
 
     fetch(ENDPOINT, { method: "POST", body: data, headers: { Accept: "application/json" } })
       .then(function (res) {
+        form.__fsSending = false;
         busy(btn, false);
         if (res.ok) { form.reset(); show(form, cfg.success, false); }
         else {
@@ -89,6 +98,7 @@
         }
       })
       .catch(function () {
+        form.__fsSending = false;
         busy(btn, false);
         show(form, "Network error — please try again, or email hello@shipspree.com.", true);
       });
@@ -98,7 +108,6 @@
     if (!btn) return;
     btn.style.opacity = on ? "0.6" : "";
     btn.style.pointerEvents = on ? "none" : "";
-    btn.setAttribute("aria-busy", on ? "true" : "false");
   }
 
   function show(form, message, isError, isPending) {
@@ -118,4 +127,15 @@
     else if (isError) { status.style.background = "#FDECEC"; status.style.color = "#8A1C1C"; }
     else { status.style.background = "#EAF6EF"; status.style.color = "#0B6B3A"; }
   }
+
+  // Framer hydrates late, and may re-render buttons — wire repeatedly for a while.
+  function boot() {
+    wire();
+    var tries = 0;
+    var iv = setInterval(function () { wire(); if (++tries > 20) clearInterval(iv); }, 500);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else { boot(); }
+  window.addEventListener("load", boot);
 })();

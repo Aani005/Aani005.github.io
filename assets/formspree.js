@@ -19,28 +19,33 @@
       success: "Thanks — we'll be in touch about getting you set up to haul." }
   ];
 
-  // Capture-phase CLICK listener on the whole document.
-  // This runs BEFORE Framer's own click handlers, so we win.
+  // Framer builds the submit control as an <a>/<button> with data-reset="button",
+  // NOT always a type=submit. So: catch any click, see if it's inside one of our
+  // forms, and if the clicked thing is the form's main action control, take over.
+  // We ignore clicks on the dropdown toggles (aria-haspopup) and on inputs.
   document.addEventListener("click", function (e) {
-    // Find the nearest submit-ish control the user clicked.
-    var target = e.target.closest(
-      'button[type="submit"], input[type="submit"], [data-framer-name*="Ballpark"], [data-framer-name*="Submit"], [name="Get Ballpark Pricing"]'
-    );
-    if (!target) return;
-
-    // Which form is it inside?
-    var form = target.closest("form");
+    // Is the click inside one of our forms?
+    var form = e.target.closest("form");
     if (!form) return;
-
     var cfg = FORMS.filter(function (f) { return form.classList.contains(f.formClass); })[0];
     if (!cfg) return; // not one of our forms — leave it alone
 
-    // Take over completely, before Framer can act.
+    // The clicked control (link or button).
+    var ctrl = e.target.closest('a, button, [data-reset="button"], [role="button"]');
+    if (!ctrl) return;
+
+    // Ignore the select/dropdown toggles inside the form — they open menus, not submit.
+    if (ctrl.getAttribute("aria-haspopup") === "listbox" || ctrl.closest('[aria-haspopup="listbox"]')) return;
+
+    // Ignore clicks on the actual input fields.
+    if (e.target.closest("input, textarea, select")) return;
+
+    // This is the form's action control (Get Ballpark Pricing / Join the Carrier Network).
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    submit(form, target, cfg);
+    submit(form, ctrl, cfg);
   }, true); // <-- true = capture phase
 
   function submit(form, btn, cfg) {

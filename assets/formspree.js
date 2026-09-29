@@ -66,6 +66,12 @@
         missing.push(el.getAttribute("name") || el.getAttribute("placeholder") || "a required field");
       }
     });
+    // Framer custom dropdowns aren't <select> — they write to hidden inputs.
+    // Treat these as mandatory too (carrier form: cities + equipment).
+    ["Operating cities", "Equipment owned"].forEach(function (nm) {
+      var el = form.querySelector('[name="' + nm + '"]');
+      if (el && !String(el.value || "").trim()) missing.push(nm);
+    });
     var emailEl = form.querySelector('input[type="email"], input[name*="Email" i]');
     if (emailEl && emailEl.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailEl.value)) {
       missing.push("a valid email");

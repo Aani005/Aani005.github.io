@@ -9,7 +9,7 @@
 (function () {
   "use strict";
 
-  var LOGO = "/assets/brand/shipspree-logo-horizontal-white.svg?v=3";
+  var LOGO = "/assets/brand/shipspree-logo-horizontal-white.svg?v=4";
 
   // The two wordmark containers Framer generates (nav + footer).
   var SELECTORS = [
@@ -32,7 +32,15 @@
         img.style.height = s.h + "px";
         img.style.width = "auto";
         img.style.display = "block";
+        img.style.objectFit = "contain";
+        img.style.verticalAlign = "middle";
+        img.style.margin = "0";
         p.replaceWith(img);
+        // Center the logo within its Framer container.
+        try {
+          box.style.display = "flex";
+          box.style.alignItems = "center";
+        } catch (e) {}
       });
     });
   }

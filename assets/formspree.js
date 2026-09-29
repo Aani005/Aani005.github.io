@@ -119,19 +119,29 @@
   function show(form, message, isError, isPending) {
     var status = form.__fsStatus;
     if (!status) {
-      status = document.createElement("p");
+      status = document.createElement("div");
       status.setAttribute("role", "status");
       status.setAttribute("aria-live", "polite");
-      status.style.cssText =
-        "margin-top:16px;font-family:'DM Sans',sans-serif;font-size:15px;line-height:1.45;" +
-        "padding:12px 16px;border-radius:8px;text-align:center;";
-      form.parentNode.insertBefore(status, form.nextSibling);
+      // Insert INSIDE the form, at the very top, so it can't land in a
+      // hidden/opacity:0 wrapper. force visibility against inherited styles.
+      form.insertBefore(status, form.firstChild);
       form.__fsStatus = status;
     }
+    // Rebuild style each time so opacity/visibility can't be stuck from a
+    // parent animation; use setProperty with priority to beat inherited rules.
+    status.style.cssText =
+      "display:block;opacity:1;visibility:visible;margin:0 0 18px 0;" +
+      "font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;line-height:1.5;" +
+      "padding:14px 18px;border-radius:10px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.08);";
+    status.style.setProperty("opacity", "1", "important");
+    status.style.setProperty("visibility", "visible", "important");
     status.textContent = message;
     if (isPending) { status.style.background = "#EEF2F7"; status.style.color = "#0E1116"; }
     else if (isError) { status.style.background = "#FDECEC"; status.style.color = "#8A1C1C"; }
-    else { status.style.background = "#EAF6EF"; status.style.color = "#0B6B3A"; }
+    else { status.style.background = "#E7F7EE"; status.style.color = "#0B6B3A"; status.style.border = "1px solid #9BD9B8"; }
+
+    // Make sure the user actually sees it.
+    try { status.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
   }
 
   // Framer hydrates late, and may re-render buttons — wire repeatedly for a while.

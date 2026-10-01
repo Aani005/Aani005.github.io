@@ -1,30 +1,33 @@
 /* ============================================================
-   ShipSpree — swap text wordmark for logo image (post-hydration)
-   Editing the static HTML doesn't work: Framer's React hydration
-   reconciles the DOM back to its component tree (text "ShipSpree").
-   So we swap AFTER hydration and keep re-applying, since Framer may
-   re-render. We replace the <p>ShipSpree</p> inside each wordmark
-   container (nav + footer) with the white horizontal logo.
+   ShipSpree — Framer DOM fixups (logo swap + hide confirmation)
+   Framer's React runtime re-renders the nav/footer wordmark and the
+   quote "Confirmation message" on load and on interaction, undoing any
+   static edit. A 250ms poll wasn't reliable. This uses a MutationObserver
+   so we re-apply the INSTANT Framer touches the DOM, plus rAF passes for
+   the first seconds after load.
    ============================================================ */
 (function () {
   "use strict";
 
-  var LOGO = "/assets/brand/shipspree-logo-horizontal-white.svg?v=5";
+  var LOGO = "/assets/brand/shipspree-logo-horizontal-white.svg?v=6";
 
-  // The two wordmark containers Framer generates (nav + footer).
-  var SELECTORS = [
+  // Wordmark containers (nav + footer) → swap text for logo image.
+  var WORDMARKS = [
     { cls: "framer-1c3wd02", h: 22 },  // nav
     { cls: "framer-11jj3ko", h: 28 }   // footer
   ];
 
-  function apply() {
-    SELECTORS.forEach(function (s) {
-      document.querySelectorAll("." + s.cls).forEach(function (box) {
-        // Already swapped? skip.
-        if (box.querySelector("img[data-ss-logo]")) return;
+  // Framer confirmation elements to keep hidden until a real submit.
+  var CONFIRM_IDS = ["fs-quote-confirmation"];
+
+  function swapLogos() {
+    WORDMARKS.forEach(function (s) {
+      var boxes = document.querySelectorAll("." + s.cls);
+      for (var i = 0; i < boxes.length; i++) {
+        var box = boxes[i];
+        if (box.querySelector("img[data-ss-logo]")) continue; // done
         var p = box.querySelector("p");
-        // Only swap if it currently holds the text wordmark.
-        if (!p || !/ShipSpree/i.test(p.textContent)) return;
+        if (!p || !/ShipSpree/i.test(p.textContent)) continue;
         var img = document.createElement("img");
         img.src = LOGO;
         img.alt = "ShipSpree";
@@ -35,22 +38,46 @@
         img.style.objectFit = "contain";
         img.style.margin = "0";
         p.replaceWith(img);
-        // Don't override the container's layout — Framer already positions
-        // it (left-aligned in the footer, centered in the nav bar). Forcing
-        // flex/align here mis-placed the footer logo.
-      });
+      }
     });
   }
 
-  function boot() {
-    apply();
-    // Framer hydrates/re-renders late; keep re-applying for a while.
-    var n = 0;
-    var iv = setInterval(function () { apply(); if (++n > 30) clearInterval(iv); }, 300);
+  function hideConfirmations() {
+    CONFIRM_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && !el.__fsRevealed) el.style.setProperty("display", "none", "important");
+    });
   }
 
+  function apply() { swapLogos(); hideConfirmations(); }
+
+  // 1) Run now.
+  apply();
+
+  // 2) MutationObserver — re-apply the instant Framer mutates the DOM.
+  var mo = new MutationObserver(function () { apply(); });
+  function startObserver() {
+    if (document.body) {
+      mo.observe(document.body, { childList: true, subtree: true });
+      apply();
+    }
+  }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else { boot(); }
-  window.addEventListener("load", boot);
+    document.addEventListener("DOMContentLoaded", startObserver);
+  } else { startObserver(); }
+  window.addEventListener("load", apply);
+
+  // 3) rAF burst for the first ~4s (covers hydration frames the observer
+  //    might fire during before body is ready).
+  var start = Date.now();
+  (function raf() {
+    apply();
+    if (Date.now() - start < 4000) requestAnimationFrame(raf);
+  })();
+
+  // Expose so formspree.js can mark a confirmation as intentionally revealed.
+  window.__ssMarkConfirmationRevealed = function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.__fsRevealed = true; el.style.setProperty("display", "block", "important"); }
+  };
 })();

@@ -9,12 +9,12 @@
 (function () {
   "use strict";
 
-  var LOGO = "/assets/brand/shipspree-logo-horizontal-white.svg?v=7";
+  var LOGO = "/assets/brand/shipspree-logo-horizontal-white.svg?v=8";
 
   // Wordmark containers (nav + footer) → swap text for logo image.
   var WORDMARKS = [
-    { cls: "framer-1c3wd02", h: 22 },  // nav
-    { cls: "framer-11jj3ko", h: 28 }   // footer
+    { cls: "framer-1c3wd02", h: 22, left: false },  // nav
+    { cls: "framer-11jj3ko", h: 28, left: true }    // footer — force left-align
   ];
 
   // Framer confirmation elements to keep hidden until a real submit.
@@ -39,6 +39,14 @@
         img.style.display = "block";
         img.style.objectFit = "contain";
         img.style.margin = "0";
+        if (s.left) {
+          // Force the logo hard to the left within its full-width container.
+          img.style.marginLeft = "0";
+          img.style.marginRight = "auto";
+          box.style.setProperty("text-align", "left", "important");
+          box.style.setProperty("align-items", "flex-start", "important");
+          box.style.setProperty("justify-content", "flex-start", "important");
+        }
         p.replaceWith(img);
       }
     });

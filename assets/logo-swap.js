@@ -9,7 +9,7 @@
 (function () {
   "use strict";
 
-  var LOGO = "/assets/brand/shipspree-logo-horizontal-white.svg?v=6";
+  var LOGO = "/assets/brand/shipspree-logo-horizontal-white.svg?v=7";
 
   // Wordmark containers (nav + footer) → swap text for logo image.
   var WORDMARKS = [
@@ -19,6 +19,8 @@
 
   // Framer confirmation elements to keep hidden until a real submit.
   var CONFIRM_IDS = ["fs-quote-confirmation"];
+  var CONFIRM_TEXT = ["we’ve received your request", "we've received your request"];
+  var revealed = false; // true only after a real successful submit
 
   function swapLogos() {
     WORDMARKS.forEach(function (s) {
@@ -42,11 +44,30 @@
     });
   }
 
+  function hideEl(el) {
+    if (!el || el.__fsRevealed) return;
+    el.style.setProperty("display", "none", "important");
+    el.style.setProperty("visibility", "hidden", "important");
+    el.style.setProperty("height", "0", "important");
+    el.style.setProperty("overflow", "hidden", "important");
+  }
+
   function hideConfirmations() {
-    CONFIRM_IDS.forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el && !el.__fsRevealed) el.style.setProperty("display", "none", "important");
-    });
+    if (revealed) return;
+    // By id (the container tagged in the HTML).
+    CONFIRM_IDS.forEach(function (id) { hideEl(document.getElementById(id)); });
+    // By text — catches any element Framer re-mounted without our id.
+    var nodes = document.querySelectorAll('[data-framer-component-type="RichTextContainer"], p');
+    for (var i = 0; i < nodes.length; i++) {
+      var t = (nodes[i].textContent || "").toLowerCase();
+      for (var k = 0; k < CONFIRM_TEXT.length; k++) {
+        if (t.indexOf(CONFIRM_TEXT[k]) !== -1) {
+          var box = nodes[i].closest('[data-framer-component-type="RichTextContainer"]') || nodes[i];
+          hideEl(box);
+          break;
+        }
+      }
+    }
   }
 
   function apply() { swapLogos(); hideConfirmations(); }
@@ -77,7 +98,14 @@
 
   // Expose so formspree.js can mark a confirmation as intentionally revealed.
   window.__ssMarkConfirmationRevealed = function (id) {
+    revealed = true; // stop hideConfirmations() from re-hiding anything
     var el = document.getElementById(id);
-    if (el) { el.__fsRevealed = true; el.style.setProperty("display", "block", "important"); }
+    if (el) {
+      el.__fsRevealed = true;
+      el.style.setProperty("display", "block", "important");
+      el.style.setProperty("visibility", "visible", "important");
+      el.style.removeProperty("height");
+      el.style.removeProperty("overflow");
+    }
   };
 })();

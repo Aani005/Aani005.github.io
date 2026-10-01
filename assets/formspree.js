@@ -23,6 +23,27 @@
       success: "Thanks — we'll be in touch about getting you set up to haul." }
   ];
 
+  // Framer re-renders its built-in "Confirmation message" element visible on
+  // load (its runtime ignores our static display:none). Keep it forcibly
+  // hidden until a real successful submit sets __fsRevealed on it.
+  var CONFIRM_IDS = ["fs-quote-confirmation"];
+  function keepConfirmationsHidden() {
+    CONFIRM_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && !el.__fsRevealed) {
+        el.style.setProperty("display", "none", "important");
+      }
+    });
+  }
+  // Run immediately and keep re-applying through Framer's hydration window.
+  keepConfirmationsHidden();
+  (function () {
+    var n = 0;
+    var iv = setInterval(function () { keepConfirmationsHidden(); if (++n > 40) clearInterval(iv); }, 250);
+    document.addEventListener("DOMContentLoaded", keepConfirmationsHidden);
+    window.addEventListener("load", keepConfirmationsHidden);
+  })();
+
   function wire() {
     FORMS.forEach(function (cfg) {
       document.querySelectorAll("form." + cfg.formClass).forEach(function (form) {
@@ -101,6 +122,7 @@
           var framerMsg = cfg.framerConfirmId && document.getElementById(cfg.framerConfirmId);
           if (framerMsg) {
             if (form.__fsStatus) form.__fsStatus.style.display = "none"; // hide our pending banner
+            framerMsg.__fsRevealed = true; // stop the keep-hidden loop from re-hiding it
             framerMsg.style.setProperty("display", "block", "important");
             framerMsg.style.setProperty("opacity", "1", "important");
             framerMsg.style.setProperty("visibility", "visible", "important");
